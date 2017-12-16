@@ -47,7 +47,7 @@
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
-import _bibtex
+import bibtexparser
 import sets
 import os
 import re
@@ -79,7 +79,10 @@ if not os.path.isdir(pdf_directory):
 if tex_file and not os.path.exists(tex_file):
     usage_and_exit("The TeX file '"+tex_file+"' does not exist.")
 
-b = _bibtex.open_file(bibtex_file,1) # The second parameter means "strict"
+with open(bibtex_file) as f:
+    bibtex_str = f.read()
+
+bib_database = bibtexparser.loads(bibtex_str)
 
 class Paper:
     def __init__(self,key,title,year):
@@ -147,29 +150,18 @@ if tex_file:
 
 keys_to_papers = {}
 
-while True:
-    be = _bibtex.next(b)
-    if not be:
-        break
-    key = be[0]
-    print >> sys.stderr, "===" + str(key)
-    bh = be[4]
-    h = {}
-    for k in be[4].keys ():
-        h[k] = _bibtex.expand(b,bh[k],-1)
-    if ("title" in h) and ("year" in h):
-        t = h["title"]
-        y = h["year"]
-        p = Paper(key,t[2],y[2])
-        bibtex_papers.add(p)
-        keys_to_papers[key] = p
-        paper_pdf_file = os.path.join(pdf_directory,key+".pdf")
-        if os.path.exists(paper_pdf_file):
-            papers_with_pdf_versions.add(p)
-        else:
-            print >> sys.stderr, "Warning: no PDF file "+paper_pdf_file
-        if not tex_file:
-            start_keys.add(key)
+for h in bib_database.entries:
+    key = h["ID"]
+    t = h["title"]
+    y = h["year"]
+    print >> sys.stderr, key + ":" + t + ":" + y
+    p = Paper(key,t,y)
+    keys_to_papers[key] = p
+    bibtex_papers.add(p)
+    start_keys.add(key)
+    paper_pdf_file = os.path.join(pdf_directory,key+".pdf")
+    if os.path.exists(paper_pdf_file):
+        papers_with_pdf_versions.add(p)
 
 earliest_year = 10000
 latest_year = 0
@@ -214,6 +206,7 @@ for k in start_keys:
     title_re_object = start_paper.make_title_re()
     # The stupidly O(n^2) bit:
     for p in papers_with_pdf_versions:
+        print >> sys.stderr, "Exploring... " + str(p)
         if k == p.key:
             continue
         # print >> sys.stderr, "Looking for title '%s' in paper '%s':" % (str(title_re_object.pattern),str(p))
@@ -221,6 +214,7 @@ for k in start_keys:
             nodes_with_connections.add(k)
             nodes_with_connections.add(p.key)
             connections.append("    \"%s\" -> \"%s\"" % (p.key,k))
+            print >> sys.stderr, "CONNECTION!!!!!"
 
 for k in nodes_with_connections:
     if not k in keys_to_papers:
@@ -228,7 +222,7 @@ for k in nodes_with_connections:
         continue
     start_paper = keys_to_papers[k]
     hsv = year_to_hsv(start_paper.year_as_int())
-    print "    \"%s\" [style=filled fillcolor=\"%f, %f, %f\"]" % (k,hsv[0],hsv[1],hsv[2])
+    print "    \"%s\"" % k
 
 for c in connections:
     print c
